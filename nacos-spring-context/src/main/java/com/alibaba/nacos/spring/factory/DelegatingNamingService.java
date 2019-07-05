@@ -67,6 +67,11 @@ class DelegatingNamingService implements NamingService, NacosServiceMetaData {
     }
 
     @Override
+    public void registerInstance(String serviceName, String groupName, String ip, int port) throws NacosException {
+        delegate.registerInstance(serviceName, groupName, ip, port);
+    }
+
+    @Override
     public void registerInstance(String serviceName, String ip, int port, String clusterName) throws NacosException {
         delegate.registerInstance(serviceName, ip, port, clusterName);
     }
@@ -81,6 +86,11 @@ class DelegatingNamingService implements NamingService, NacosServiceMetaData {
      * @param clusterName instance cluster name
      * @throws NacosException
      */
+    @Override
+    public void registerInstance(String serviceName, String groupName, String ip, int port, String clusterName) throws NacosException {
+        delegate.registerInstance(serviceName, groupName, ip, port, clusterName);
+    }
+
     @Override
     public void registerInstance(String serviceName, String groupName, String ip, int port, String clusterName) throws NacosException {
         delegate.registerInstance(serviceName, groupName, ip, port, clusterName);
@@ -105,6 +115,11 @@ class DelegatingNamingService implements NamingService, NacosServiceMetaData {
     }
 
     @Override
+    public void registerInstance(String serviceName, String groupName, Instance instance) throws NacosException {
+        delegate.registerInstance(serviceName, groupName, instance);
+    }
+
+    @Override
     public void deregisterInstance(String serviceName, String ip, int port) throws NacosException {
         delegate.deregisterInstance(serviceName, ip, port);
     }
@@ -121,6 +136,11 @@ class DelegatingNamingService implements NamingService, NacosServiceMetaData {
     @Override
     public void deregisterInstance(String serviceName, String groupName, String ip, int port) throws NacosException {
         delegate.registerInstance(serviceName, groupName, ip, port);
+    }
+
+    @Override
+    public void deregisterInstance(String serviceName, String groupName, String ip, int port) throws NacosException {
+        delegate.deregisterInstance(serviceName, groupName, ip, port);
     }
 
     @Override
@@ -151,6 +171,16 @@ class DelegatingNamingService implements NamingService, NacosServiceMetaData {
      * @param instance    instance information
      * @throws NacosException
      */
+    @Override
+    public void deregisterInstance(String serviceName, String groupName, Instance instance) throws NacosException {
+        delegate.deregisterInstance(serviceName, groupName, instance);
+    }
+
+    @Override
+    public void deregisterInstance(String serviceName, String groupName, String ip, int port, String clusterName) throws NacosException {
+        delegate.deregisterInstance(serviceName, groupName, ip, port, clusterName);
+    }
+
     @Override
     public void deregisterInstance(String serviceName, String groupName, Instance instance) throws NacosException {
         delegate.deregisterInstance(serviceName, groupName, instance);
@@ -196,6 +226,21 @@ class DelegatingNamingService implements NamingService, NacosServiceMetaData {
      * @return A list of instance
      * @throws NacosException
      */
+    @Override
+    public List<Instance> getAllInstances(String serviceName, String groupName, boolean subscribe) throws NacosException {
+        return delegate.getAllInstances(serviceName, groupName, subscribe);
+    }
+
+    @Override
+    public List<Instance> getAllInstances(String serviceName, String groupName) throws NacosException {
+        return delegate.getAllInstances(serviceName, groupName);
+    }
+
+    @Override
+    public List<Instance> getAllInstances(String serviceName, boolean subscribe) throws NacosException {
+        return delegate.getAllInstances(serviceName, subscribe);
+    }
+
     @Override
     public List<Instance> getAllInstances(String serviceName, String groupName, boolean subscribe) throws NacosException {
         return delegate.getAllInstances(serviceName, groupName, subscribe);
@@ -250,6 +295,21 @@ class DelegatingNamingService implements NamingService, NacosServiceMetaData {
     }
 
     @Override
+    public List<Instance> getAllInstances(String serviceName, String groupName, List<String> clusters) throws NacosException {
+        return delegate.getAllInstances(serviceName, groupName, clusters);
+    }
+
+    @Override
+    public List<Instance> getAllInstances(String serviceName, List<String> clusters, boolean subscribe) throws NacosException {
+        return delegate.getAllInstances(serviceName, clusters, subscribe);
+    }
+
+    @Override
+    public List<Instance> getAllInstances(String serviceName, String groupName, List<String> clusters, boolean subscribe) throws NacosException {
+        return delegate.getAllInstances(serviceName, groupName, clusters, subscribe);
+    }
+
+    @Override
     public List<Instance> selectInstances(String serviceName, boolean healthy) throws NacosException {
         return delegate.selectInstances(serviceName, healthy);
     }
@@ -292,6 +352,21 @@ class DelegatingNamingService implements NamingService, NacosServiceMetaData {
      * @return A qualified list of instance
      * @throws NacosException
      */
+    @Override
+    public List<Instance> selectInstances(String serviceName, String groupName, boolean healthy, boolean subscribe) throws NacosException {
+        return delegate.selectInstances(serviceName, groupName, healthy, subscribe);
+    }
+
+    @Override
+    public List<Instance> selectInstances(String serviceName, String groupName, boolean healthy) throws NacosException {
+        return delegate.selectInstances(serviceName, groupName, healthy);
+    }
+
+    @Override
+    public List<Instance> selectInstances(String serviceName, boolean healthy, boolean subscribe) throws NacosException {
+        return delegate.selectInstances(serviceName, healthy, subscribe);
+    }
+
     @Override
     public List<Instance> selectInstances(String serviceName, String groupName, boolean healthy, boolean subscribe) throws NacosException {
         return delegate.selectInstances(serviceName, groupName, healthy, subscribe);
@@ -349,6 +424,21 @@ class DelegatingNamingService implements NamingService, NacosServiceMetaData {
     }
 
     @Override
+    public List<Instance> selectInstances(String serviceName, String groupName, List<String> clusters, boolean healthy) throws NacosException {
+        return delegate.selectInstances(serviceName, groupName, clusters, healthy);
+    }
+
+    @Override
+    public List<Instance> selectInstances(String serviceName, List<String> clusters, boolean healthy, boolean subscribe) throws NacosException {
+        return delegate.selectInstances(serviceName, clusters, healthy, subscribe);
+    }
+
+    @Override
+    public List<Instance> selectInstances(String serviceName, String groupName, List<String> clusters, boolean healthy, boolean subscribe) throws NacosException {
+        return delegate.selectInstances(serviceName, groupName, clusters, healthy, subscribe);
+    }
+
+    @Override
     public Instance selectOneHealthyInstance(String serviceName) throws NacosException {
         return delegate.selectOneHealthyInstance(serviceName);
     }
@@ -388,6 +478,21 @@ class DelegatingNamingService implements NamingService, NacosServiceMetaData {
      * @return qualified instance
      * @throws NacosException
      */
+    @Override
+    public Instance selectOneHealthyInstance(String serviceName, String groupName, boolean subscribe) throws NacosException {
+        return delegate.selectOneHealthyInstance(serviceName, groupName, subscribe);
+    }
+
+    @Override
+    public Instance selectOneHealthyInstance(String serviceName, String groupName) throws NacosException {
+        return delegate.selectOneHealthyInstance(serviceName, groupName);
+    }
+
+    @Override
+    public Instance selectOneHealthyInstance(String serviceName, boolean subscribe) throws NacosException {
+        return delegate.selectOneHealthyInstance(serviceName, subscribe);
+    }
+
     @Override
     public Instance selectOneHealthyInstance(String serviceName, String groupName, boolean subscribe) throws NacosException {
         return delegate.selectOneHealthyInstance(serviceName, groupName, subscribe);
@@ -442,6 +547,21 @@ class DelegatingNamingService implements NamingService, NacosServiceMetaData {
     }
 
     @Override
+    public Instance selectOneHealthyInstance(String serviceName, String groupName, List<String> clusters) throws NacosException {
+        return delegate.selectOneHealthyInstance(serviceName, groupName, clusters);
+    }
+
+    @Override
+    public Instance selectOneHealthyInstance(String serviceName, List<String> clusters, boolean subscribe) throws NacosException {
+        return delegate.selectOneHealthyInstance(serviceName, clusters, subscribe);
+    }
+
+    @Override
+    public Instance selectOneHealthyInstance(String serviceName, String groupName, List<String> clusters, boolean subscribe) throws NacosException {
+        return delegate.selectOneHealthyInstance(serviceName, groupName, clusters, subscribe);
+    }
+
+    @Override
     public void subscribe(String serviceName, EventListener listener) throws NacosException {
         delegate.subscribe(serviceName, listener);
     }
@@ -454,6 +574,11 @@ class DelegatingNamingService implements NamingService, NacosServiceMetaData {
      * @param listener    event listener
      * @throws NacosException
      */
+    @Override
+    public void subscribe(String serviceName, String groupName, EventListener listener) throws NacosException {
+        delegate.subscribe(serviceName, groupName, listener);
+    }
+
     @Override
     public void subscribe(String serviceName, String groupName, EventListener listener) throws NacosException {
         delegate.subscribe(serviceName, groupName, listener);
@@ -479,6 +604,11 @@ class DelegatingNamingService implements NamingService, NacosServiceMetaData {
     }
 
     @Override
+    public void subscribe(String serviceName, String groupName, List<String> clusters, EventListener listener) throws NacosException {
+        delegate.subscribe(serviceName, groupName, clusters, listener);
+    }
+
+    @Override
     public void unsubscribe(String serviceName, EventListener listener) throws NacosException {
         delegate.unsubscribe(serviceName, listener);
     }
@@ -491,6 +621,11 @@ class DelegatingNamingService implements NamingService, NacosServiceMetaData {
      * @param listener    event listener
      * @throws NacosException
      */
+    @Override
+    public void unsubscribe(String serviceName, String groupName, EventListener listener) throws NacosException {
+        delegate.unsubscribe(serviceName, groupName, listener);
+    }
+
     @Override
     public void unsubscribe(String serviceName, String groupName, EventListener listener) throws NacosException {
         delegate.unsubscribe(serviceName, groupName, listener);
@@ -510,6 +645,11 @@ class DelegatingNamingService implements NamingService, NacosServiceMetaData {
      * @param listener    event listener
      * @throws NacosException
      */
+    @Override
+    public void unsubscribe(String serviceName, String groupName, List<String> clusters, EventListener listener) throws NacosException {
+        delegate.unsubscribe(serviceName, groupName, clusters, listener);
+    }
+
     @Override
     public void unsubscribe(String serviceName, String groupName, List<String> clusters, EventListener listener) throws NacosException {
         delegate.unsubscribe(serviceName, groupName, clusters, listener);
@@ -559,6 +699,21 @@ class DelegatingNamingService implements NamingService, NacosServiceMetaData {
      * @return list of service names
      * @throws NacosException
      */
+    @Override
+    public ListView<String> getServicesOfServer(int pageNo, int pageSize, String groupName, AbstractSelector selector) throws NacosException {
+        return delegate.getServicesOfServer(pageNo, pageSize, groupName, selector);
+    }
+
+    @Override
+    public ListView<String> getServicesOfServer(int pageNo, int pageSize, String groupName) throws NacosException {
+        return delegate.getServicesOfServer(pageNo, pageSize, groupName);
+    }
+
+    @Override
+    public ListView<String> getServicesOfServer(int pageNo, int pageSize, AbstractSelector selector) throws NacosException {
+        return delegate.getServicesOfServer(pageNo, pageSize, selector);
+    }
+
     @Override
     public ListView<String> getServicesOfServer(int pageNo, int pageSize, String groupName, AbstractSelector selector) throws NacosException {
         return delegate.getServicesOfServer(pageNo, pageSize, groupName, selector);

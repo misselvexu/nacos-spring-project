@@ -16,12 +16,14 @@
  */
 package com.alibaba.nacos.spring.test;
 
+import com.alibaba.nacos.api.PropertyKeyConst;
 import com.alibaba.nacos.api.config.ConfigService;
 import com.alibaba.nacos.spring.factory.CacheableEventPublishingNacosServiceFactory;
 import com.alibaba.nacos.spring.factory.NacosServiceFactory;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.util.StringUtils;
 
 import java.util.Map;
 import java.util.Properties;
@@ -46,31 +48,28 @@ public class TestConfiguration {
             "name = mercyblitz\n" +
             "value = 0.95\n" +
             "intData  = 1234\n" +
-            "float-data = 1234.5";
+            "float-data = 1234.5\n" +
+            "list = 1,2,3,4,5\n" +
+            "map[key-1]=value";
 
     public static final String MODIFIED_TEST_CONTEXT = "id = 1\n" +
             "name = mercyblitz@gmail.com\n" +
-            "value = 9527\n";
+            "value = 9527\n" +
+            "list[0] = 6\n" +
+            "list[1] = 6\n" +
+            "list[2] = 6\n" +
+            "list[3] = 6\n" +
+            "map[key-2]=value\n" +
+            "map[key-3]=value";
+
 
     @Bean(name = GLOBAL_NACOS_PROPERTIES_BEAN_NAME)
     public Properties globalNacosProperties() {
         Properties properties = new Properties();
-        return properties;
-    }
-
-    @Bean(name = CacheableEventPublishingNacosServiceFactory.BEAN_NAME)
-    public NacosServiceFactory nacosServiceFactory(ListableBeanFactory beanFactory) {
-
-        MockNacosServiceFactory nacosServiceFactory = new MockNacosServiceFactory();
-
-        Map<String, ConfigService> configServices = beanFactory.getBeansOfType(ConfigService.class);
-
-        if (configServices.containsKey(CONFIG_SERVICE_BEAN_NAME)) {
-            ConfigService configService = configServices.get(CONFIG_SERVICE_BEAN_NAME);
-            nacosServiceFactory.setConfigService(configService);
+        if (!StringUtils.isEmpty(System.getProperty("server.addr"))) {
+            properties.put(PropertyKeyConst.SERVER_ADDR, System.getProperty("server.addr"));
         }
-
-        return nacosServiceFactory;
+        return properties;
     }
 
 }

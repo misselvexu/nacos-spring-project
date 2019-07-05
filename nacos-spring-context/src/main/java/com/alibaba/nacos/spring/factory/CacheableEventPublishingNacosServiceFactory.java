@@ -19,6 +19,7 @@ package com.alibaba.nacos.spring.factory;
 import com.alibaba.nacos.api.NacosFactory;
 import com.alibaba.nacos.api.config.ConfigService;
 import com.alibaba.nacos.api.exception.NacosException;
+import com.alibaba.nacos.api.naming.NamingMaintainService;
 import com.alibaba.nacos.api.naming.NamingService;
 import com.alibaba.nacos.spring.context.event.config.EventPublishingConfigService;
 import org.springframework.beans.BeansException;
@@ -41,11 +42,15 @@ import static com.alibaba.nacos.spring.util.NacosUtils.identify;
  * @author <a href="mailto:mercyblitz@gmail.com">Mercy</a>
  * @since 0.1.0
  */
-public class CacheableEventPublishingNacosServiceFactory implements NacosServiceFactory, ApplicationContextAware {
+public class CacheableEventPublishingNacosServiceFactory implements NacosServiceFactory {
+
+    private static final CacheableEventPublishingNacosServiceFactory SINGLETON = new CacheableEventPublishingNacosServiceFactory();
 
     private final Map<String, ConfigService> configServicesCache = new LinkedHashMap<String, ConfigService>(2);
 
     private final Map<String, NamingService> namingServicesCache = new LinkedHashMap<String, NamingService>(2);
+
+    private final Map<String, NamingMaintainService> maintainServiceCache = new LinkedHashMap<String, NamingMaintainService>(2);
 
     private ConfigurableApplicationContext context;
 
@@ -72,7 +77,7 @@ public class CacheableEventPublishingNacosServiceFactory implements NacosService
 
     private ConfigService doCreateConfigService(Properties properties) throws NacosException {
         ConfigService configService = NacosFactory.createConfigService(properties);
-        return new EventPublishingConfigService(configService, properties, context, nacosConfigListenerExecutor);
+        return new EventPublishingConfigService(configService, properties, getSingleton().context, getSingleton().nacosConfigListenerExecutor);
     }
 
     @Override
@@ -95,9 +100,28 @@ public class CacheableEventPublishingNacosServiceFactory implements NacosService
     }
 
     @Override
+    public NamingMaintainService createNamingMaintainService(Properties properties) throws NacosException {
+
+        Properties copy = new Properties();
+
+        copy.putAll(properties);
+
+        String cacheKey = identify(copy);
+
+        NamingMaintainService namingMaintainService = maintainServiceCache.get(cacheKey);
+
+        if (namingMaintainService == null) {
+            namingMaintainService = new DelegatingNamingMaintainService(NacosFactory.createMaintainService(copy), properties);
+            maintainServiceCache.put(cacheKey, namingMaintainService);
+        }
+
+        return namingMaintainService;
+    }
+
     public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
         this.context = (ConfigurableApplicationContext) applicationContext;
-        this.nacosConfigListenerExecutor = getNacosConfigListenerExecutorIfPresent(applicationContext);
+        this.nacosConfigListenerExecutor = getSingleton().nacosConfigListenerExecutor == null ?
+                getNacosConfigListenerExecutorIfPresent(applicationContext) : getSingleton().nacosConfigListenerExecutor;
     }
 
     @Override
@@ -108,5 +132,14 @@ public class CacheableEventPublishingNacosServiceFactory implements NacosService
     @Override
     public Collection<NamingService> getNamingServices() {
         return namingServicesCache.values();
+    }
+
+    @Override
+    public Collection<NamingMaintainService> getNamingMaintainService() {
+        return maintainServiceCache.values();
+    }
+
+    public static CacheableEventPublishingNacosServiceFactory getSingleton() {
+        return SINGLETON;
     }
 }

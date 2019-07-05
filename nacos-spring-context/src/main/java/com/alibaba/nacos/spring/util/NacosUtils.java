@@ -19,9 +19,13 @@ package com.alibaba.nacos.spring.util;
 import com.alibaba.nacos.api.annotation.NacosProperties;
 import com.alibaba.nacos.api.config.ConfigService;
 import com.alibaba.nacos.api.config.annotation.NacosConfigurationProperties;
+import com.alibaba.nacos.api.config.annotation.NacosIgnore;
+import com.alibaba.nacos.api.config.annotation.NacosProperty;
 import com.alibaba.nacos.api.exception.NacosException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.MutablePropertyValues;
+import org.springframework.beans.PropertyValues;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.PropertyResolver;
 import org.springframework.util.CollectionUtils;
@@ -31,17 +35,23 @@ import org.springframework.util.StringUtils;
 import java.io.IOException;
 import java.io.StringReader;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.Collection;
+import java.util.Enumeration;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.regex.Pattern;
 
 import static com.alibaba.nacos.api.PropertyKeyConst.*;
+import static org.springframework.core.annotation.AnnotationUtils.getAnnotation;
 import static org.springframework.core.annotation.AnnotationUtils.getAnnotationAttributes;
+import static org.springframework.util.StringUtils.hasText;
 
 /**
  * Nacos Utilities class
@@ -56,6 +66,10 @@ public abstract class NacosUtils {
      */
     public static final String DEFAULT_STRING_ATTRIBUTE_VALUE = "";
 
+    /**
+     * Default value of {@link String} attribute for {@link Annotation}
+     */
+    public static final String DEFAULT_CONFIG_TYPE_VALUE = "properties";
 
     /**
      * Default value of boolean attribute for {@link Annotation}
@@ -164,6 +178,35 @@ public abstract class NacosUtils {
         return records.isEmpty();
     }
 
+    public static PropertyValues resolvePropertyValues(Object bean, String content, String type) {
+        return resolvePropertyValues(bean, "", "", content, type);
+    }
+
+    public static PropertyValues resolvePropertyValues(Object bean, String dataId, String groupId, String content, String type) {
+        final Properties configProperties = toProperties(dataId, groupId, content, type);
+        final MutablePropertyValues propertyValues = new MutablePropertyValues();
+        ReflectionUtils.doWithFields(bean.getClass(), new ReflectionUtils.FieldCallback() {
+            @Override
+            public void doWith(Field field) throws IllegalArgumentException, IllegalAccessException {
+                String propertyName = NacosUtils.resolvePropertyName(field);
+                if (hasText(propertyName)) {
+                    // If it is a map, the data will not be fetched
+                    // fix issue #91
+                    if (Collection.class.isAssignableFrom(field.getType()) ||
+                            field.getType().isAssignableFrom(Map.class)) {
+                        bindContainer(propertyName, configProperties, propertyValues);
+                        return;
+                    }
+                    if (configProperties.containsKey(propertyName)) {
+                        String propertyValue = configProperties.getProperty(propertyName);
+                        propertyValues.add(field.getName(), propertyValue);
+                    }
+                }
+            }
+        });
+        return propertyValues;
+    }
+
     public static Properties resolveProperties(NacosProperties nacosProperties, PropertyResolver propertyResolver) {
         return resolveProperties(nacosProperties, propertyResolver, null);
     }
@@ -257,6 +300,58 @@ public abstract class NacosUtils {
         return content;
     }
 
+    /**
+     * Simple solutions to support {@link Map} or {@link Collection}
+     *
+     * @param fieldName property name
+     * @param configProperties config context
+     * @param propertyValues {@link MutablePropertyValues}
+     */
+    private static void bindContainer(String fieldName, Properties configProperties, MutablePropertyValues propertyValues) {
+        String regx1 = fieldName + "\\[(.*)\\]";
+        String regx2 = fieldName + "\\..*";
+        Pattern pattern1 = Pattern.compile(regx1);
+        Pattern pattern2 = Pattern.compile(regx2);
+        Enumeration<String> enumeration = (Enumeration<String>) configProperties.propertyNames();
+        while (enumeration.hasMoreElements()) {
+            String s = enumeration.nextElement();
+            String value = configProperties.getProperty(s);
+            if (configProperties.containsKey(fieldName)) {
+                bindContainer(fieldName, listToProperties(fieldName, configProperties.getProperty(fieldName)), propertyValues);
+            }
+            else if (pattern1.matcher(s).find()) {
+                propertyValues.add(s, value);
+            } else if (pattern2.matcher(s).find()) {
+                int index = s.indexOf('.');
+                if (index != -1) {
+                    String key = s.substring(index + 1);
+                    propertyValues.add(fieldName + "[" + key + "]", value);
+                }
+            }
+        }
+    }
+
+    private static Properties listToProperties(String fieldName, String content) {
+        String[] splits = content.split(",");
+        int index = 0;
+        Properties properties = new Properties();
+        for (String s : splits) {
+            properties.put(fieldName + "[" + index + "]", s.trim());
+            index ++;
+        }
+        return properties;
+    }
+
+    private static String resolvePropertyName(Field field) {
+        // Ignore property name if @NacosIgnore present
+        if (getAnnotation(field, NacosIgnore.class) != null) {
+            return null;
+        }
+        NacosProperty nacosProperty = getAnnotation(field, NacosProperty.class);
+        // If @NacosProperty present ,return its value() , or field name
+        return nacosProperty != null ? nacosProperty.value() : field.getName();
+    }
+
     public static <T> Class<T> resolveGenericType(Class<?> declaredClass) {
         ParameterizedType parameterizedType = (ParameterizedType) declaredClass.getGenericSuperclass();
         Type[] actualTypeArguments = parameterizedType.getActualTypeArguments();
@@ -264,17 +359,28 @@ public abstract class NacosUtils {
     }
 
     public static Properties toProperties(String text) {
-        Properties properties = new Properties();
-        try {
-            if (StringUtils.hasText(text)) {
-                properties.load(new StringReader(text));
-            }
-        } catch (IOException e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage(), e);
-            }
-        }
-        return properties;
+        return toProperties(text, "properties");
+    }
+
+    public static Properties toProperties(String text, String type) {
+        return toProperties("", "", text, type);
+    }
+
+    public static Properties toProperties(String dataId, String group, String text) {
+        return toProperties(dataId, group, text, "properties");
+    }
+
+    /**
+     * XML configuration parsing to support different schemas
+     *
+     * @param dataId config dataId
+     * @param group config group
+     * @param text config context
+     * @param type config type
+     * @return {@link Properties}
+     */
+    public static Properties toProperties(String dataId, String group, String text, String type) {
+        return ConfigParseUtils.toProperties(dataId, group, text, type);
     }
 
 
