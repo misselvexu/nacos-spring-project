@@ -16,16 +16,19 @@
  */
 package com.alibaba.nacos.spring.context.event.config;
 
-import com.alibaba.nacos.api.config.ConfigService;
-import com.alibaba.nacos.api.config.listener.Listener;
-import org.springframework.context.ApplicationEventPublisher;
-
 import java.util.concurrent.Executor;
 
+import com.alibaba.nacos.api.config.ConfigService;
+import com.alibaba.nacos.api.config.ConfigType;
+import com.alibaba.nacos.api.config.listener.Listener;
+
+import org.springframework.context.ApplicationEventPublisher;
+
 /**
- * A Delegating {@link NacosConfigReceivedEvent Event} Publishing {@link Listener} of Nacos Config {@link Listener} with
- * dataId, groupId and {@link ConfigService} instance. A {@link NacosConfigReceivedEvent Nacos config received event}
- * will be published when a new Nacos config received.
+ * A Delegating {@link NacosConfigReceivedEvent Event} Publishing {@link Listener} of
+ * Nacos Config {@link Listener} with dataId, groupId and {@link ConfigService} instance.
+ * A {@link NacosConfigReceivedEvent Nacos config received event} will be published when a
+ * new Nacos config received.
  *
  * @author <a href="mailto:mercyblitz@gmail.com">Mercy</a>
  * @see NacosConfigReceivedEvent
@@ -33,57 +36,69 @@ import java.util.concurrent.Executor;
  * @see Listener
  * @since 0.1.0
  */
-final class DelegatingEventPublishingListener implements Listener {
+public final class DelegatingEventPublishingListener implements Listener {
 
-    private final ConfigService configService;
+	private final ConfigService configService;
 
-    private final String dataId;
+	private final String dataId;
 
-    private final String groupId;
+	private final String groupId;
 
-    private final ApplicationEventPublisher applicationEventPublisher;
+	private final ApplicationEventPublisher applicationEventPublisher;
 
-    private final Executor executor;
+	private final String configType;
 
-    private final Listener delegate;
+	private final Executor executor;
 
-    DelegatingEventPublishingListener(ConfigService configService, String dataId, String groupId,
-                                      ApplicationEventPublisher applicationEventPublisher,
-                                      Executor executor, Listener delegate) {
-        this.configService = configService;
-        this.dataId = dataId;
-        this.groupId = groupId;
-        this.applicationEventPublisher = applicationEventPublisher;
-        this.executor = executor;
-        this.delegate = delegate;
-    }
+	private final Listener delegate;
 
-    @Override
-    public Executor getExecutor() {
-        Executor executor = delegate.getExecutor();
-        if (executor == null) {
-            executor = this.executor;
-        }
-        return executor;
-    }
+	DelegatingEventPublishingListener(ConfigService configService, String dataId,
+			String groupId, ApplicationEventPublisher applicationEventPublisher,
+			Executor executor, Listener delegate) {
+		this(configService, dataId, groupId, ConfigType.PROPERTIES.getType(),
+				applicationEventPublisher, executor, delegate);
+	}
 
-    /**
-     * Callback method on Nacos config received
-     *
-     * @param content Nacos config
-     */
-    @Override
-    public void receiveConfigInfo(String content) {
-        publishEvent(content);
-        onReceived(content);
-    }
+	DelegatingEventPublishingListener(ConfigService configService, String dataId,
+			String groupId, String configType,
+			ApplicationEventPublisher applicationEventPublisher, Executor executor,
+			Listener delegate) {
+		this.configService = configService;
+		this.dataId = dataId;
+		this.groupId = groupId;
+		this.configType = configType;
+		this.applicationEventPublisher = applicationEventPublisher;
+		this.executor = executor;
+		this.delegate = delegate;
+	}
 
-    private void publishEvent(String content) {
-        NacosConfigReceivedEvent event = new NacosConfigReceivedEvent(configService, dataId, groupId, content);
-        applicationEventPublisher.publishEvent(event);
-    }
+	@Override
+	public Executor getExecutor() {
+		Executor executor = delegate.getExecutor();
+		if (executor == null) {
+			executor = this.executor;
+		}
+		return executor;
+	}
 
-    private void onReceived(String content) {
-        delegate.receiveConfigInfo(content);
-    }
+	/**
+	 * Callback method on Nacos config received
+	 *
+	 * @param content Nacos config
+	 */
+	@Override
+	public void receiveConfigInfo(String content) {
+		onReceived(content);
+		publishEvent(content);
+	}
+
+	private void publishEvent(String content) {
+		NacosConfigReceivedEvent event = new NacosConfigReceivedEvent(configService,
+				dataId, groupId, content, configType);
+		applicationEventPublisher.publishEvent(event);
+	}
+
+	private void onReceived(String content) {
+		delegate.receiveConfigInfo(content);
+	}
 }

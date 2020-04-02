@@ -16,7 +16,11 @@
  */
 package com.alibaba.nacos.spring.convert.converter.config;
 
+import java.util.Map;
+
 import com.alibaba.nacos.api.config.convert.NacosConfigConverter;
+import com.alibaba.nacos.spring.util.ConfigParseUtils;
+
 import org.springframework.core.convert.ConversionService;
 import org.springframework.format.support.DefaultFormattingConversionService;
 
@@ -28,29 +32,40 @@ import org.springframework.format.support.DefaultFormattingConversionService;
  */
 public class DefaultNacosConfigConverter<T> implements NacosConfigConverter<T> {
 
-    private final Class<T> targetType;
+	private final Class<T> targetType;
 
-    private final ConversionService conversionService;
+	private final ConversionService conversionService;
 
-    public DefaultNacosConfigConverter(Class<T> targetType) {
-        this(targetType, new DefaultFormattingConversionService());
-    }
+	private final String type;
 
-    public DefaultNacosConfigConverter(Class<T> targetType, ConversionService conversionService) {
-        this.targetType = targetType;
-        this.conversionService = conversionService;
-    }
+	public DefaultNacosConfigConverter(Class<T> targetType) {
+		this(targetType, new DefaultFormattingConversionService(), "properties");
+	}
 
-    @Override
-    public T convert(String source) {
-        if (conversionService.canConvert(source.getClass(), targetType)) {
-            return conversionService.convert(source, targetType);
-        }
-        return null;
-    }
+	public DefaultNacosConfigConverter(Class<T> targetType,
+			ConversionService conversionService, String type) {
+		this.targetType = targetType;
+		this.conversionService = conversionService;
+		this.type = type;
+	}
 
-    @Override
-    public boolean canConvert(Class<T> targetType) {
-        return conversionService.canConvert(String.class, targetType);
-    }
+	@Override
+	public T convert(String source) {
+
+		// If the parameter is of Map type, the configuration is automatically formatted
+
+		if (Map.class.isAssignableFrom(targetType)) {
+			return (T) ConfigParseUtils.toProperties(source, type);
+		}
+
+		if (conversionService.canConvert(source.getClass(), targetType)) {
+			return conversionService.convert(source, targetType);
+		}
+		return null;
+	}
+
+	@Override
+	public boolean canConvert(Class<T> targetType) {
+		return conversionService.canConvert(String.class, targetType);
+	}
 }

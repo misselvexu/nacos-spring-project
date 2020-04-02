@@ -20,37 +20,37 @@ import java.util.Properties;
 
 /**
  * @author <a href="mailto:liaochunyhm@live.com">liaochuntao</a>
- * @since
+ * @since 0.3.0
  */
 public interface ConfigParse {
 
-    /**
-     * parse config context to map
-     *
-     * @param configText receive config context
-     * @return {@link Properties}
-     */
-    Properties parse(String configText);
+	/**
+	 * parse config context to map
+	 *
+	 * @param configText receive config context
+	 * @return {@link Properties}
+	 */
+	Properties parse(String configText);
 
-    /**
-     * get this ConfigParse process config type
-     *
-     * @return this parse process type
-     */
-    String processType();
+	/**
+	 * get this ConfigParse process config type
+	 *
+	 * @return this parse process type
+	 */
+	String processType();
 
-    /**
-     * get config dataId
-     *
-     * @return dataId
-     */
-    String dataId();
+	/**
+	 * get config dataId
+	 *
+	 * @return dataId
+	 */
+	String dataId();
 
-    /**
-     * get config group
-     *
-     * @return group
-     */
-    String group();
+	/**
+	 * get config group
+	 *
+	 * @return group
+	 */
+	String group();
 
 }

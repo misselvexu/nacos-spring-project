@@ -16,6 +16,9 @@
  */
 package com.alibaba.nacos.spring.context.annotation.config;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import com.alibaba.nacos.api.annotation.NacosInjected;
 import com.alibaba.nacos.api.annotation.NacosProperties;
 import com.alibaba.nacos.api.config.ConfigService;
@@ -28,12 +31,12 @@ import com.alibaba.nacos.spring.core.env.AnnotationNacosPropertySourceBuilder;
 import com.alibaba.nacos.spring.core.env.NacosPropertySourcePostProcessor;
 import com.alibaba.nacos.spring.factory.ApplicationContextHolder;
 import com.alibaba.nacos.spring.test.AbstractNacosHttpServerTestExecutionListener;
-import com.alibaba.nacos.spring.test.MockConfigService;
 import com.alibaba.nacos.spring.test.TestApplicationHolder;
 import com.alibaba.nacos.spring.test.TestConfiguration;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -45,9 +48,6 @@ import org.springframework.test.context.TestExecutionListeners;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.springframework.test.context.support.DependencyInjectionTestExecutionListener;
 import org.springframework.test.context.support.DirtiesContextTestExecutionListener;
-
-import java.util.HashMap;
-import java.util.Map;
 
 import static com.alibaba.nacos.api.common.Constants.DEFAULT_GROUP;
 import static com.alibaba.nacos.embedded.web.server.NacosConfigHttpHandler.CONTENT_PARAM_NAME;
@@ -66,148 +66,137 @@ import static org.springframework.core.env.StandardEnvironment.SYSTEM_PROPERTIES
  * @since 0.1.0
  */
 @RunWith(SpringJUnit4ClassRunner.class)
-@ContextConfiguration(classes = {
-        NacosPropertySourcePostProcessorTest.class
-})
-@TestExecutionListeners({DependencyInjectionTestExecutionListener.class,
-        DirtiesContextTestExecutionListener.class, NacosPropertySourcePostProcessorTest.class})
+@ContextConfiguration(classes = { NacosPropertySourcePostProcessorTest.class })
+@TestExecutionListeners({ DependencyInjectionTestExecutionListener.class,
+		DirtiesContextTestExecutionListener.class,
+		NacosPropertySourcePostProcessorTest.class })
 @EnableNacos(globalProperties = @NacosProperties(serverAddr = "${server.addr}"))
-public class NacosPropertySourcePostProcessorTest extends AbstractNacosHttpServerTestExecutionListener {
+public class NacosPropertySourcePostProcessorTest
+		extends AbstractNacosHttpServerTestExecutionListener {
 
-    private static final String TEST_PROPERTY_NAME = "user.name";
+	private static final String TEST_PROPERTY_NAME = "user.name";
 
-    private static final String TEST_PROPERTY_VALUE = "mercyblitz@" + System.currentTimeMillis();
+	private static final String TEST_PROPERTY_VALUE = "mercyblitz@"
+			+ System.currentTimeMillis();
 
-    private static final String TEST_CONTENT = TEST_PROPERTY_NAME + "=" + TEST_PROPERTY_VALUE
-            + System.getProperty("line.separator")
-            + "PATH = /My/Path";
+	private static final String TEST_CONTENT = TEST_PROPERTY_NAME + "="
+			+ TEST_PROPERTY_VALUE + System.getProperty("line.separator")
+			+ "PATH = /My/Path";
+	@NacosInjected
+	private ConfigService configService;
 
-    @NacosPropertySources({
-            @NacosPropertySource(
-                    name = "second",
-                    dataId = DATA_ID,
-                    first = true,
-                    before = SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME,
-                    after = SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME),
-            @NacosPropertySource(
-                    name = "first",
-                    dataId = DATA_ID,
-                    first = true,
-                    before = SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME,
-                    after = SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME)
-    })
-    @NacosPropertySource(
-            dataId = DATA_ID,
-            before = SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
-            after = SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME)
-    private static class FirstOrderNacosPropertySource {
+	@Override
+	public void init(EmbeddedNacosHttpServer httpServer) {
+		Map<String, String> config = new HashMap<String, String>(1);
+		config.put(DATA_ID_PARAM_NAME, DATA_ID);
+		config.put(GROUP_ID_PARAM_NAME, DEFAULT_GROUP);
+		config.put(CONTENT_PARAM_NAME, TEST_CONTENT);
+		httpServer.initConfig(config);
+	}
 
-    }
+	@Override
+	protected String getServerAddressPropertyName() {
+		return "server.addr";
+	}
 
-    @NacosPropertySource(
-            dataId = DATA_ID,
-            before = SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
-            after = SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME)
-    private static class RelativeOrderNacosPropertySource {
+	@Bean(name = ApplicationContextHolder.BEAN_NAME)
+	public ApplicationContextHolder applicationContextHolder(
+			ApplicationContext applicationContext) {
+		ApplicationContextHolder applicationContextHolder = new ApplicationContextHolder();
+		applicationContextHolder.setApplicationContext(applicationContext);
+		return applicationContextHolder;
+	}
 
-    }
+	@Test
+	public void testFirstOrder() throws NacosException {
 
-    @Override
-    public void init(EmbeddedNacosHttpServer httpServer) {
-        Map<String, String> config = new HashMap<String, String>(1);
-        config.put(DATA_ID_PARAM_NAME, DATA_ID);
-        config.put(GROUP_ID_PARAM_NAME, DEFAULT_GROUP);
-        config.put(CONTENT_PARAM_NAME, TEST_CONTENT);
-        httpServer.initConfig(config);
-    }
+		AnnotationConfigApplicationContext context = createContext(DATA_ID, DEFAULT_GROUP,
+				TEST_CONTENT);
 
-    @Override
-    protected String getServerAddressPropertyName() {
-        return "server.addr";
-    }
+		context.register(FirstOrderNacosPropertySource.class);
 
-    @Bean(name = ApplicationContextHolder.BEAN_NAME)
-    public ApplicationContextHolder applicationContextHolder(ApplicationContext applicationContext) {
-        ApplicationContextHolder applicationContextHolder = new ApplicationContextHolder();
-        applicationContextHolder.setApplicationContext(applicationContext);
-        return applicationContextHolder;
-    }
+		context.refresh();
 
-    @NacosInjected
-    private ConfigService configService;
+		ConfigurableEnvironment environment = context.getEnvironment();
 
+		PropertySource propertySource = environment.getPropertySources().get("first");
 
-    @Test
-    public void testFirstOrder() throws NacosException {
+		PropertySource firstPropertySource = environment.getPropertySources().iterator()
+				.next();
 
-        AnnotationConfigApplicationContext context = createContext(DATA_ID, DEFAULT_GROUP, TEST_CONTENT);
+		Assert.assertNotNull(propertySource);
 
-        context.register(FirstOrderNacosPropertySource.class);
+		Assert.assertEquals(propertySource, firstPropertySource);
 
-        context.refresh();
+		String systemProperty = System.getProperty(TEST_PROPERTY_NAME);
 
-        ConfigurableEnvironment environment = context.getEnvironment();
+		String propertyValue = environment.getProperty(TEST_PROPERTY_NAME);
 
-        PropertySource propertySource = environment.getPropertySources().get("first");
+		Assert.assertNotEquals(systemProperty, propertyValue);
 
-        PropertySource firstPropertySource = environment.getPropertySources().iterator().next();
+		Assert.assertEquals(TEST_PROPERTY_VALUE, propertyValue);
 
-        Assert.assertNotNull(propertySource);
+		Assert.assertEquals(TEST_PROPERTY_VALUE,
+				propertySource.getProperty(TEST_PROPERTY_NAME));
 
-        Assert.assertEquals(propertySource, firstPropertySource);
+	}
 
-        String systemProperty = System.getProperty(TEST_PROPERTY_NAME);
+	@Test
+	public void testRelativeOrder() throws NacosException {
 
-        String propertyValue = environment.getProperty(TEST_PROPERTY_NAME);
+		AnnotationConfigApplicationContext context = createContext(DATA_ID, DEFAULT_GROUP,
+				TEST_CONTENT);
 
-        Assert.assertNotEquals(systemProperty, propertyValue);
+		context.register(RelativeOrderNacosPropertySource.class);
 
-        Assert.assertEquals(TEST_PROPERTY_VALUE, propertyValue);
+		context.refresh();
 
-        Assert.assertEquals(TEST_PROPERTY_VALUE, propertySource.getProperty(TEST_PROPERTY_NAME));
+		ConfigurableEnvironment environment = context.getEnvironment();
 
-    }
+		PropertySource propertySource = environment.getPropertySources().get("before");
 
-    @Test
-    public void testRelativeOrder() throws NacosException {
+		// Java System Properties before Nacos Properties
+		String systemProperty = System.getProperty(TEST_PROPERTY_NAME);
+		String propertyValue = environment.getProperty(TEST_PROPERTY_NAME);
 
-        AnnotationConfigApplicationContext context = createContext(DATA_ID, DEFAULT_GROUP, TEST_CONTENT);
+		Assert.assertEquals(systemProperty, propertyValue);
+		Assert.assertNotNull(TEST_PROPERTY_VALUE, propertyValue);
 
-        context.register(RelativeOrderNacosPropertySource.class);
+		// Environment Variables after Nacos Properties
+		String path = System.getenv().get("PATH");
+		propertyValue = environment.getProperty("PATH");
 
-        context.refresh();
+		Assert.assertNotNull(path, propertyValue);
+		Assert.assertEquals("/My/Path", propertyValue);
+	}
 
-        ConfigurableEnvironment environment = context.getEnvironment();
+	private AnnotationConfigApplicationContext createContext(String dataId,
+			String groupId, String content) throws NacosException {
+		AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
 
-        PropertySource propertySource = environment.getPropertySources().get("before");
+		ConfigurableListableBeanFactory beanFactory = context.getBeanFactory();
 
-        // Java System Properties before Nacos Properties
-        String systemProperty = System.getProperty(TEST_PROPERTY_NAME);
-        String propertyValue = environment.getProperty(TEST_PROPERTY_NAME);
+		configService.publishConfig(dataId, groupId, content);
 
-        Assert.assertEquals(systemProperty, propertyValue);
-        Assert.assertNotNull(TEST_PROPERTY_VALUE, propertyValue);
+		beanFactory.registerSingleton(CONFIG_SERVICE_BEAN_NAME, configService);
 
-        // Environment Variables after Nacos Properties
-        String path = System.getenv().get("PATH");
-        propertyValue = environment.getProperty("PATH");
+		context.register(AnnotationNacosInjectedBeanPostProcessor.class,
+				NacosPropertySourcePostProcessor.class, ConfigServiceBeanBuilder.class,
+				AnnotationNacosPropertySourceBuilder.class, TestConfiguration.class,
+				TestApplicationHolder.class);
+		return context;
+	}
 
-        Assert.assertNotNull(path, propertyValue);
-        Assert.assertEquals("/My/Path", propertyValue);
-    }
+	@NacosPropertySources({
+			@NacosPropertySource(name = "second", dataId = DATA_ID, first = true, before = SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME, after = SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME),
+			@NacosPropertySource(name = "first", dataId = DATA_ID, first = true, before = SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME, after = SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME) })
+	@NacosPropertySource(dataId = DATA_ID, before = SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME, after = SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME)
+	private static class FirstOrderNacosPropertySource {
 
-    private AnnotationConfigApplicationContext createContext(String dataId, String groupId, String content) throws NacosException {
-        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
+	}
 
-        ConfigurableListableBeanFactory beanFactory = context.getBeanFactory();
+	@NacosPropertySource(dataId = DATA_ID, before = SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME, after = SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME)
+	private static class RelativeOrderNacosPropertySource {
 
-        configService.publishConfig(dataId, groupId, content);
-
-        beanFactory.registerSingleton(CONFIG_SERVICE_BEAN_NAME, configService);
-
-        context.register(AnnotationNacosInjectedBeanPostProcessor.class,
-                NacosPropertySourcePostProcessor.class, ConfigServiceBeanBuilder.class,
-                AnnotationNacosPropertySourceBuilder.class, TestConfiguration.class, TestApplicationHolder.class);
-        return context;
-    }
+	}
 }

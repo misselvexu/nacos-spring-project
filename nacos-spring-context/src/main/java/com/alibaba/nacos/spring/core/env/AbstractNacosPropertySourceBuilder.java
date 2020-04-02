@@ -16,33 +16,47 @@
  */
 package com.alibaba.nacos.spring.core.env;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+
+import com.alibaba.nacos.api.config.ConfigType;
 import com.alibaba.nacos.spring.context.event.DeferredApplicationEventPublisher;
 import com.alibaba.nacos.spring.context.event.config.NacosConfigMetadataEvent;
+import com.alibaba.nacos.spring.util.NacosUtils;
 import com.alibaba.nacos.spring.util.config.NacosConfigLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanClassLoaderAware;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.config.BeanDefinition;
-import org.springframework.context.*;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.EnvironmentAware;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.Environment;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
-import java.util.*;
-
-import static com.alibaba.nacos.spring.context.annotation.config.NacosPropertySource.*;
+import static com.alibaba.nacos.spring.context.annotation.config.NacosPropertySource.CONFIG_TYPE_ATTRIBUTE_NAME;
+import static com.alibaba.nacos.spring.context.annotation.config.NacosPropertySource.DATA_ID_ATTRIBUTE_NAME;
+import static com.alibaba.nacos.spring.context.annotation.config.NacosPropertySource.GROUP_ID_ATTRIBUTE_NAME;
+import static com.alibaba.nacos.spring.context.annotation.config.NacosPropertySource.NAME_ATTRIBUTE_NAME;
+import static com.alibaba.nacos.spring.context.annotation.config.NacosPropertySource.PROPERTIES_ATTRIBUTE_NAME;
 import static com.alibaba.nacos.spring.util.GlobalNacosPropertiesSource.CONFIG;
 import static com.alibaba.nacos.spring.util.NacosBeanUtils.getNacosServiceFactoryBean;
 import static com.alibaba.nacos.spring.util.NacosUtils.buildDefaultPropertySourceName;
 import static com.alibaba.nacos.spring.util.NacosUtils.resolveProperties;
 import static com.alibaba.spring.util.ClassUtils.resolveGenericType;
 import static java.lang.String.format;
-import static java.lang.String.valueOf;
 import static org.springframework.util.ClassUtils.resolveClassName;
 
 /**
@@ -52,201 +66,212 @@ import static org.springframework.util.ClassUtils.resolveClassName;
  * @author <a href="mailto:mercyblitz@gmail.com">Mercy</a>
  * @since 0.1.0
  */
-public abstract class AbstractNacosPropertySourceBuilder<T extends BeanDefinition> implements EnvironmentAware,
-        BeanFactoryAware, BeanClassLoaderAware, ApplicationContextAware, InitializingBean {
+public abstract class AbstractNacosPropertySourceBuilder<T extends BeanDefinition>
+		implements EnvironmentAware, BeanFactoryAware, BeanClassLoaderAware,
+		ApplicationContextAware, InitializingBean {
 
-    protected final Logger logger = LoggerFactory.getLogger(this.getClass());
+	protected final Logger logger = LoggerFactory.getLogger(this.getClass());
+	private final Class<T> beanDefinitionType;
+	protected ConfigurableEnvironment environment;
+	protected BeanFactory beanFactory;
+	private NacosConfigLoader nacosConfigLoader;
+	private Properties globalNacosProperties;
+	private ClassLoader classLoader;
 
-    protected ConfigurableEnvironment environment;
+	private ApplicationEventPublisher applicationEventPublisher;
 
-    protected BeanFactory beanFactory;
+	public AbstractNacosPropertySourceBuilder() {
+		beanDefinitionType = resolveGenericType(getClass());
+	}
 
-    private NacosConfigLoader nacosConfigLoader;
+	/**
+	 * Build {@link NacosPropertySource} from {@link BeanDefinition}
+	 *
+	 * @param beanName Bean name
+	 * @param beanDefinition {@link BeanDefinition}
+	 * @return a {@link NacosPropertySource} instance
+	 */
+	public List<NacosPropertySource> build(String beanName, T beanDefinition) {
 
-    private Properties globalNacosProperties;
+		Map<String, Object>[] attributesArray = resolveRuntimeAttributesArray(
+				beanDefinition, globalNacosProperties);
 
-    private final Class<T> beanDefinitionType;
+		int size = attributesArray == null ? 0 : attributesArray.length;
 
-    private ClassLoader classLoader;
+		if (size == 0) {
+			return Collections.emptyList();
+		}
 
-    private ApplicationEventPublisher applicationEventPublisher;
+		List<NacosPropertySource> nacosPropertySources = new ArrayList<NacosPropertySource>(
+				size);
 
-    public AbstractNacosPropertySourceBuilder() {
-        beanDefinitionType = resolveGenericType(getClass());
-    }
+		for (int i = 0; i < size; i++) {
+			Map<String, Object> attributes = attributesArray[i];
+			if (!CollectionUtils.isEmpty(attributes)) {
 
-    /**
-     * Build {@link NacosPropertySource} from {@link BeanDefinition}
-     *
-     * @param beanName       Bean name
-     * @param beanDefinition {@link BeanDefinition}
-     * @return a {@link NacosPropertySource} instance
-     */
-    public List<NacosPropertySource> build(String beanName, T beanDefinition) {
+				NacosPropertySource nacosPropertySource = doBuild(beanName,
+						beanDefinition, attributesArray[i]);
 
-        Map<String, Object>[] attributesArray = resolveRuntimeAttributesArray(beanDefinition, globalNacosProperties);
+				NacosConfigMetadataEvent metadataEvent = createMetaEvent(
+						nacosPropertySource, beanDefinition);
 
-        int size = attributesArray == null ? 0 : attributesArray.length;
+				initMetadataEvent(nacosPropertySource, beanDefinition, metadataEvent);
 
-        if (size == 0) {
-            return Collections.emptyList();
-        }
+				publishMetadataEvent(metadataEvent);
 
-        List<NacosPropertySource> nacosPropertySources = new ArrayList<NacosPropertySource>(size);
+				nacosPropertySources.add(nacosPropertySource);
 
-        for (int i = 0; i < size; i++) {
-            Map<String, Object> attributes = attributesArray[i];
-            if (!CollectionUtils.isEmpty(attributes)) {
+			}
+		}
 
-                NacosPropertySource nacosPropertySource = doBuild(beanName, beanDefinition, attributesArray[i]);
+		return nacosPropertySources;
+	}
 
-                NacosConfigMetadataEvent metadataEvent = createMetaEvent(nacosPropertySource, beanDefinition);
+	protected abstract NacosConfigMetadataEvent createMetaEvent(
+			NacosPropertySource nacosPropertySource, T beanDefinition);
 
-                initMetadataEvent(nacosPropertySource, beanDefinition, metadataEvent);
+	private void initMetadataEvent(NacosPropertySource nacosPropertySource,
+			T beanDefinition, NacosConfigMetadataEvent metadataEvent) {
+		metadataEvent.setDataId(nacosPropertySource.getDataId());
+		metadataEvent.setGroupId(nacosPropertySource.getGroupId());
+		metadataEvent.setBeanName(nacosPropertySource.getBeanName());
+		metadataEvent.setBeanType(nacosPropertySource.getBeanType());
+		metadataEvent.setNacosProperties(nacosPropertySource.getProperties());
+		Map<String, Object> attributesMetadata = nacosPropertySource
+				.getAttributesMetadata();
+		Map<String, Object> nacosPropertiesAttributes = (Map<String, Object>) attributesMetadata
+				.get(PROPERTIES_ATTRIBUTE_NAME);
+		metadataEvent.setNacosPropertiesAttributes(nacosPropertiesAttributes);
+		doInitMetadataEvent(nacosPropertySource, beanDefinition, metadataEvent);
+	}
 
-                publishMetadataEvent(metadataEvent);
+	private void publishMetadataEvent(NacosConfigMetadataEvent metadataEvent) {
+		applicationEventPublisher.publishEvent(metadataEvent);
+	}
 
-                nacosPropertySources.add(nacosPropertySource);
+	protected abstract void doInitMetadataEvent(NacosPropertySource nacosPropertySource,
+			T beanDefinition, NacosConfigMetadataEvent metadataEvent);
 
-            }
-        }
+	protected NacosPropertySource doBuild(String beanName, T beanDefinition,
+			Map<String, Object> runtimeAttributes) {
 
-        return nacosPropertySources;
-    }
+		// Get annotation metadata
+		String name = (String) runtimeAttributes.get(NAME_ATTRIBUTE_NAME);
+		String dataId = (String) runtimeAttributes.get(DATA_ID_ATTRIBUTE_NAME);
+		String groupId = (String) runtimeAttributes.get(GROUP_ID_ATTRIBUTE_NAME);
+		String type = ((ConfigType) runtimeAttributes.get(CONFIG_TYPE_ATTRIBUTE_NAME))
+				.getType();
 
-    protected abstract NacosConfigMetadataEvent createMetaEvent(NacosPropertySource nacosPropertySource, T beanDefinition);
+		dataId = NacosUtils.readFromEnvironment(dataId, environment);
+		groupId = NacosUtils.readFromEnvironment(groupId, environment);
+		type = StringUtils.isEmpty(NacosUtils.readTypeFromDataId(dataId)) ? type
+				: NacosUtils.readTypeFromDataId(dataId);
+		Map<String, Object> nacosPropertiesAttributes = (Map<String, Object>) runtimeAttributes
+				.get(PROPERTIES_ATTRIBUTE_NAME);
 
-    private void initMetadataEvent(NacosPropertySource nacosPropertySource, T beanDefinition,
-                                   NacosConfigMetadataEvent metadataEvent) {
-        metadataEvent.setDataId(nacosPropertySource.getDataId());
-        metadataEvent.setGroupId(nacosPropertySource.getGroupId());
-        metadataEvent.setBeanName(nacosPropertySource.getBeanName());
-        metadataEvent.setBeanType(nacosPropertySource.getBeanType());
-        metadataEvent.setNacosProperties(nacosPropertySource.getProperties());
-        Map<String, Object> attributesMetadata = nacosPropertySource.getAttributesMetadata();
-        Map<String, Object> nacosPropertiesAttributes = (Map<String, Object>) attributesMetadata.get(PROPERTIES_ATTRIBUTE_NAME);
-        metadataEvent.setNacosPropertiesAttributes(nacosPropertiesAttributes);
-        doInitMetadataEvent(nacosPropertySource, beanDefinition, metadataEvent);
-    }
+		Properties nacosProperties = resolveProperties(nacosPropertiesAttributes,
+				environment, globalNacosProperties);
 
-    private void publishMetadataEvent(NacosConfigMetadataEvent metadataEvent) {
-        applicationEventPublisher.publishEvent(metadataEvent);
-    }
+		String nacosConfig = nacosConfigLoader.load(dataId, groupId, nacosProperties);
 
+		if (!StringUtils.hasText(nacosConfig)) {
+			if (logger.isWarnEnabled()) {
+				logger.warn(format(
+						"There is no content for NacosPropertySource from dataId[%s] , groupId[%s] , properties[%s].",
+						dataId, groupId, nacosPropertiesAttributes));
+			}
+		}
 
-    protected abstract void doInitMetadataEvent(NacosPropertySource nacosPropertySource, T beanDefinition,
-                                                NacosConfigMetadataEvent metadataEvent);
+		if (!StringUtils.hasText(name)) {
+			name = buildDefaultPropertySourceName(dataId, groupId, nacosProperties);
+		}
 
+		NacosPropertySource nacosPropertySource = new NacosPropertySource(dataId, groupId,
+				name, nacosConfig, type);
 
-    protected NacosPropertySource doBuild(String beanName, T beanDefinition, Map<String, Object> runtimeAttributes) {
+		nacosPropertySource.setBeanName(beanName);
 
-        // Get annotation metadata
-        String name = (String) runtimeAttributes.get(NAME_ATTRIBUTE_NAME);
-        String dataId = (String) runtimeAttributes.get(DATA_ID_ATTRIBUTE_NAME);
-        String groupId = (String) runtimeAttributes.get(GROUP_ID_ATTRIBUTE_NAME);
-        String type = (String) runtimeAttributes.get(CONFIG_TYPE_ATTRIBUTE_NAME);
-        Map<String, Object> nacosPropertiesAttributes = (Map<String, Object>) runtimeAttributes.get(PROPERTIES_ATTRIBUTE_NAME);
+		String beanClassName = beanDefinition.getBeanClassName();
+		if (StringUtils.hasText(beanClassName)) {
+			nacosPropertySource.setBeanType(resolveClassName(beanClassName, classLoader));
+		}
+		nacosPropertySource.setGroupId(groupId);
+		nacosPropertySource.setDataId(dataId);
+		nacosPropertySource.setProperties(nacosProperties);
 
-        Properties nacosProperties = resolveProperties(nacosPropertiesAttributes, environment, globalNacosProperties);
+		initNacosPropertySource(nacosPropertySource, beanDefinition, runtimeAttributes);
 
-        String nacosConfig = nacosConfigLoader.load(dataId, groupId, nacosProperties);
+		return nacosPropertySource;
 
-        if (!StringUtils.hasText(nacosConfig)) {
-            if (logger.isWarnEnabled()) {
-                logger.warn(format("There is no content for NacosPropertySource from dataId[%s] , groupId[%s] , properties[%s].",
-                        dataId,
-                        groupId,
-                        valueOf(nacosPropertiesAttributes)));
-            }
-        }
+	}
 
-        if (!StringUtils.hasText(name)) {
-            name = buildDefaultPropertySourceName(dataId, groupId, nacosProperties);
-        }
+	/**
+	 * Runtime attributes must contain those:
+	 * <ul>
+	 * <li>{@link com.alibaba.nacos.spring.context.annotation.config.NacosPropertySource#NAME_ATTRIBUTE_NAME}</li>
+	 * <li>{@link com.alibaba.nacos.spring.context.annotation.config.NacosPropertySource#DATA_ID_ATTRIBUTE_NAME}</li>
+	 * <li>{@link com.alibaba.nacos.spring.context.annotation.config.NacosPropertySource#GROUP_ID_ATTRIBUTE_NAME}</li>
+	 * <li>{@link com.alibaba.nacos.spring.context.annotation.config.NacosPropertySource#PROPERTIES_ATTRIBUTE_NAME}</li>
+	 * </ul>
+	 *
+	 * @param beanDefinition Bean Definition
+	 * @param globalNacosProperties Global Nacos {@link Properties}
+	 * @return a non-null attributes array
+	 */
+	protected abstract Map<String, Object>[] resolveRuntimeAttributesArray(
+			T beanDefinition, Properties globalNacosProperties);
 
-        NacosPropertySource nacosPropertySource = new NacosPropertySource(dataId, groupId, name, nacosConfig, type);
+	protected abstract void initNacosPropertySource(
+			NacosPropertySource nacosPropertySource, T beanDefinition,
+			Map<String, Object> attributes);
 
-        nacosPropertySource.setBeanName(beanName);
+	/**
+	 * Whether target {@link BeanDefinition} supports or not
+	 *
+	 * @param beanDefinition {@link BeanDefinition}
+	 * @return If supports, return <code>true</code>, or <code>false</code>
+	 */
+	public boolean supports(BeanDefinition beanDefinition) {
+		Class<?> beanDefinitionClass = beanDefinition.getClass();
+		return beanDefinitionType.isAssignableFrom(beanDefinitionClass);
+	}
 
-        String beanClassName = beanDefinition.getBeanClassName();
-        if (StringUtils.hasText(beanClassName)) {
-            nacosPropertySource.setBeanType(resolveClassName(beanClassName, classLoader));
-        }
-        nacosPropertySource.setGroupId(groupId);
-        nacosPropertySource.setDataId(dataId);
-        nacosPropertySource.setProperties(nacosProperties);
+	@Override
+	public void setEnvironment(Environment environment) {
+		if (environment instanceof ConfigurableEnvironment) {
+			this.environment = (ConfigurableEnvironment) environment;
+		}
+	}
 
-        initNacosPropertySource(nacosPropertySource, beanDefinition, runtimeAttributes);
+	@Override
+	public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
+		this.beanFactory = beanFactory;
+	}
 
-        return nacosPropertySource;
+	@Override
+	public void setBeanClassLoader(ClassLoader classLoader) {
+		this.classLoader = classLoader;
+	}
 
-    }
+	@Override
+	public void setApplicationContext(ApplicationContext applicationContext) {
+		ConfigurableApplicationContext context = (ConfigurableApplicationContext) applicationContext;
+		this.applicationEventPublisher = new DeferredApplicationEventPublisher(context);
+	}
 
-    /**
-     * Runtime attributes must contain those:
-     * <ul>
-     * <li>{@link com.alibaba.nacos.spring.context.annotation.config.NacosPropertySource#NAME_ATTRIBUTE_NAME}</li>
-     * <li>{@link com.alibaba.nacos.spring.context.annotation.config.NacosPropertySource#DATA_ID_ATTRIBUTE_NAME}</li>
-     * <li>{@link com.alibaba.nacos.spring.context.annotation.config.NacosPropertySource#GROUP_ID_ATTRIBUTE_NAME}</li>
-     * <li>{@link com.alibaba.nacos.spring.context.annotation.config.NacosPropertySource#PROPERTIES_ATTRIBUTE_NAME}</li>
-     * </ul>
-     *
-     * @param beanDefinition        Bean Definition
-     * @param globalNacosProperties Global Nacos {@link Properties}
-     * @return a non-null attributes array
-     */
-    protected abstract Map<String, Object>[] resolveRuntimeAttributesArray(T beanDefinition, Properties globalNacosProperties);
+	@Override
+	public void afterPropertiesSet() throws Exception {
+		nacosConfigLoader = new NacosConfigLoader(environment);
+		nacosConfigLoader.setNacosServiceFactory(getNacosServiceFactoryBean(beanFactory));
+		globalNacosProperties = CONFIG.getMergedGlobalProperties(beanFactory);
+	}
 
-    protected abstract void initNacosPropertySource(NacosPropertySource nacosPropertySource, T beanDefinition,
-                                                    Map<String, Object> attributes);
-
-    /**
-     * Whether target {@link BeanDefinition} supports or not
-     *
-     * @param beanDefinition {@link BeanDefinition}
-     * @return If supports, return <code>true</code>, or <code>false</code>
-     */
-    public boolean supports(BeanDefinition beanDefinition) {
-        Class<?> beanDefinitionClass = beanDefinition.getClass();
-        return beanDefinitionType.isAssignableFrom(beanDefinitionClass);
-    }
-
-    @Override
-    public void setEnvironment(Environment environment) {
-        if (environment instanceof ConfigurableEnvironment) {
-            this.environment = (ConfigurableEnvironment) environment;
-        }
-    }
-
-    @Override
-    public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
-        this.beanFactory = beanFactory;
-    }
-
-    @Override
-    public void setBeanClassLoader(ClassLoader classLoader) {
-        this.classLoader = classLoader;
-    }
-
-    @Override
-    public void setApplicationContext(ApplicationContext applicationContext) {
-        ConfigurableApplicationContext context = (ConfigurableApplicationContext) applicationContext;
-        this.applicationEventPublisher = new DeferredApplicationEventPublisher(context);
-    }
-
-    @Override
-    public void afterPropertiesSet() throws Exception {
-        nacosConfigLoader = new NacosConfigLoader(environment);
-        nacosConfigLoader.setNacosServiceFactory(getNacosServiceFactoryBean(beanFactory));
-        globalNacosProperties = CONFIG.getMergedGlobalProperties(beanFactory);
-    }
-
-    /**
-     * The type of {@link T Bean Definition}
-     *
-     * @return type of {@link T Bean Definition}
-     */
-    public final Class<T> getBeanDefinitionType() {
-        return beanDefinitionType;
-    }
+	/**
+	 * The type of {@link T Bean Definition}
+	 *
+	 * @return type of {@link T Bean Definition}
+	 */
+	public final Class<T> getBeanDefinitionType() {
+		return beanDefinitionType;
+	}
 }
